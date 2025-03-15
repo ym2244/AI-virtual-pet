@@ -3,9 +3,9 @@ import os
 import glob
 import google.generativeai as genai
 from dotenv import load_dotenv
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTextEdit, QLineEdit, QPushButton, QLabel, QSystemTrayIcon, QMenu, QAction
-from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtCore import QTimer, Qt, QPoint
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTextEdit, QLineEdit, QPushButton, QLabel
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtCore import QTimer, Qt, QThread, pyqtSignal
 
 # 读取 API Key
 load_dotenv()
@@ -20,13 +20,39 @@ def chat_with_ai(user_message):
     response = model.generate_content(user_message)
     return response.text
 
-# 桌宠窗口（正方形，透明，可拖动）
+
+# === 线程类（处理动画，不影响 UI） ===
+class AnimationThread(QThread):
+    update_pixmap = pyqtSignal(QPixmap)
+
+    def __init__(self, image_folder):
+        super().__init__()
+        self.image_paths = sorted(glob.glob(os.path.join(image_folder, "*.png")))
+        self.current_frame = 0
+        self.running = True
+
+    def run(self):
+        """ 在独立线程中持续更新动画 """
+        while self.running:
+            pixmap = QPixmap(self.image_paths[self.current_frame])
+            self.update_pixmap.emit(pixmap)
+            self.current_frame = (self.current_frame + 1) % len(self.image_paths)
+            self.msleep(100)  # 控制动画速度（100ms）
+
+    def stop(self):
+        """ 停止动画线程 """
+        self.running = False
+        self.quit()
+        self.wait()
+
+
+# === 桌宠窗口（透明 + 可拖动 + 置顶） ===
 class DeskPet(QWidget):
     def __init__(self):
         super().__init__()
 
         self.setWindowTitle("AI 桌宠")
-        self.setGeometry(100, 100, 400, 400)  # 让窗口是正方形
+        self.setGeometry(100, 100, 400, 400)
 
         # 设置无边框 & 透明背景
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
@@ -34,39 +60,29 @@ class DeskPet(QWidget):
 
         # 创建 QLabel 作为动画窗口
         self.pet_label = QLabel(self)
-        self.pet_label.setGeometry(0, 0, 400, 400)  # 让 QLabel 也是正方形
-        self.pet_label.setScaledContents(False)  # 禁止自动缩放，避免图片拉伸
+        self.pet_label.setGeometry(0, 0, 400, 400)
+        self.pet_label.setScaledContents(False)
 
-        # 载入 PNG 动画帧
+        # 启动动画线程
         self.image_folder = r"D:\vscode\C\pet\images\Default\Happy\1"
-        self.image_paths = sorted(glob.glob(os.path.join(self.image_folder, "*.png")))
-        self.current_frame = 0
+        self.animation_thread = AnimationThread(self.image_folder)
+        self.animation_thread.update_pixmap.connect(self.update_frame)
+        self.animation_thread.start()
 
-        # 设置定时器，每 100ms 切换一张图片
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_frame)
-        self.timer.start(100)  # 控制动画速度
-
-        # 先显示第一张图片
-        self.update_frame()
-
-        # 启用鼠标拖动
+        # 记录聊天窗口
+        self.chat_window = None
+        self.locked = False
         self.old_pos = None
-        self.chat_window = None  # 记录聊天窗口
-        self.locked = False  # 默认不锁定
 
-    def update_frame(self):
-        """ 切换到下一张图片 """
-        if self.image_paths:
-            pixmap = QPixmap(self.image_paths[self.current_frame])
-            scaled_pixmap = pixmap.scaled(
-                self.pet_label.width(),  # 让图片适应 QLabel
-                self.pet_label.height(),
-                Qt.KeepAspectRatio,  # 保持比例，不拉伸
-                Qt.SmoothTransformation  # 让缩放更平滑
-            )
-            self.pet_label.setPixmap(scaled_pixmap)
-            self.current_frame = (self.current_frame + 1) % len(self.image_paths)  # 循环切换
+    def update_frame(self, pixmap):
+        """ 更新动画帧 """
+        scaled_pixmap = pixmap.scaled(
+            self.pet_label.width(),
+            self.pet_label.height(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
+        self.pet_label.setPixmap(scaled_pixmap)
 
     def set_chat_window(self, chat_window):
         """ 关联聊天窗口 """
@@ -87,7 +103,6 @@ class DeskPet(QWidget):
             delta = event.globalPos() - self.old_pos
             self.move(self.x() + delta.x(), self.y() + delta.y())
             
-            # 如果锁定了，则同步移动聊天窗口
             if self.locked and self.chat_window:
                 self.chat_window.move(self.chat_window.x() + delta.x(), self.chat_window.y() + delta.y())
 
@@ -97,17 +112,23 @@ class DeskPet(QWidget):
         """ 释放鼠标 """
         self.old_pos = None
 
+    def showEvent(self, event):
+        """ 确保桌宠始终在最上层 """
+        if not self.locked:
+            self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+            self.show()
 
-# 独立对话窗口
+
+# === 聊天窗口（支持锁定 & 最小化同步桌宠） ===
 class ChatWindow(QWidget):
     def __init__(self, pet_window):
         super().__init__()
 
         self.setWindowTitle("AI 桌宠对话框")
-        self.setGeometry(500, 100, 400, 300)  # 设定位置 & 大小
-        self.pet_window = pet_window  # 记录桌宠窗口
-        self.locked = False  # 默认不锁定
-        self.old_pos = None  # 记录鼠标位置
+        self.setGeometry(500, 100, 400, 300)
+        self.pet_window = pet_window
+        self.locked = False
+        self.old_pos = None
 
         layout = QVBoxLayout()
 
@@ -140,14 +161,11 @@ class ChatWindow(QWidget):
         if not user_text:
             return
 
-        # 显示用户输入
         self.chat_display.append(f"我: {user_text}")
 
-        # 获取 AI 回复
         response = chat_with_ai(user_text)
         self.chat_display.append(f"桌宠: {response}")
 
-        # 清空输入框
         self.input_box.clear()
 
     def mousePressEvent(self, event):
@@ -161,7 +179,6 @@ class ChatWindow(QWidget):
             delta = event.globalPos() - self.old_pos
             self.move(self.x() + delta.x(), self.y() + delta.y())
 
-            # 如果锁定了，则同步移动桌宠窗口
             if self.locked:
                 self.pet_window.move(self.pet_window.x() + delta.x(), self.pet_window.y() + delta.y())
 
@@ -171,19 +188,24 @@ class ChatWindow(QWidget):
         """ 释放鼠标 """
         self.old_pos = None
 
+    def changeEvent(self, event):
+        """ 最小化/恢复时，桌宠窗口也跟随 """
+        if event.type() == 105:  # 105 = QEvent.WindowStateChange
+            if self.windowState() == Qt.WindowMinimized and self.locked:
+                self.pet_window.setWindowState(Qt.WindowMinimized)
+            elif self.windowState() == Qt.WindowNoState and self.locked:
+                self.pet_window.setWindowState(Qt.WindowNoState)
+                self.pet_window.show()
 
-# 运行应用
+
+# === 运行应用 ===
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    # 创建桌宠窗口
     pet_window = DeskPet()
-
-    # 创建对话窗口
     chat_window = ChatWindow(pet_window)
-    pet_window.set_chat_window(chat_window)  # 关联聊天窗口
+    pet_window.set_chat_window(chat_window)
 
-    # 显示窗口
     pet_window.show()
     chat_window.show()
     
