@@ -5,7 +5,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTextEdit, QLineEdit, QPushButton, QLabel, QSystemTrayIcon, QMenu, QAction
 from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer, Qt, QPoint
 
 # 读取 API Key
 load_dotenv()
@@ -52,6 +52,8 @@ class DeskPet(QWidget):
 
         # 启用鼠标拖动
         self.old_pos = None
+        self.chat_window = None  # 记录聊天窗口
+        self.locked = False  # 默认不锁定
 
     def update_frame(self):
         """ 切换到下一张图片 """
@@ -66,16 +68,29 @@ class DeskPet(QWidget):
             self.pet_label.setPixmap(scaled_pixmap)
             self.current_frame = (self.current_frame + 1) % len(self.image_paths)  # 循环切换
 
+    def set_chat_window(self, chat_window):
+        """ 关联聊天窗口 """
+        self.chat_window = chat_window
+
+    def toggle_lock(self):
+        """ 切换锁定状态 """
+        self.locked = not self.locked
+
     def mousePressEvent(self, event):
         """ 允许鼠标拖动桌宠 """
         if event.button() == Qt.LeftButton:
             self.old_pos = event.globalPos()
 
     def mouseMoveEvent(self, event):
-        """ 拖动窗口 """
+        """ 拖动窗口，并在锁定时同时移动聊天窗口 """
         if self.old_pos:
             delta = event.globalPos() - self.old_pos
             self.move(self.x() + delta.x(), self.y() + delta.y())
+            
+            # 如果锁定了，则同步移动聊天窗口
+            if self.locked and self.chat_window:
+                self.chat_window.move(self.chat_window.x() + delta.x(), self.chat_window.y() + delta.y())
+
             self.old_pos = event.globalPos()
 
     def mouseReleaseEvent(self, event):
@@ -85,11 +100,14 @@ class DeskPet(QWidget):
 
 # 独立对话窗口
 class ChatWindow(QWidget):
-    def __init__(self):
+    def __init__(self, pet_window):
         super().__init__()
 
         self.setWindowTitle("AI 桌宠对话框")
         self.setGeometry(500, 100, 400, 300)  # 设定位置 & 大小
+        self.pet_window = pet_window  # 记录桌宠窗口
+        self.locked = False  # 默认不锁定
+        self.old_pos = None  # 记录鼠标位置
 
         layout = QVBoxLayout()
 
@@ -104,7 +122,18 @@ class ChatWindow(QWidget):
         send_button.clicked.connect(self.send_message)
         layout.addWidget(send_button)
 
+        # 添加 "锁定/解锁" 按钮
+        self.lock_button = QPushButton("🔒 锁定", self)
+        self.lock_button.clicked.connect(self.toggle_lock)
+        layout.addWidget(self.lock_button)
+
         self.setLayout(layout)
+
+    def toggle_lock(self):
+        """ 切换锁定状态 """
+        self.locked = not self.locked
+        self.pet_window.toggle_lock()
+        self.lock_button.setText("🔓 解锁" if self.locked else "🔒 锁定")
 
     def send_message(self):
         user_text = self.input_box.text().strip()
@@ -121,29 +150,26 @@ class ChatWindow(QWidget):
         # 清空输入框
         self.input_box.clear()
 
+    def mousePressEvent(self, event):
+        """ 允许鼠标拖动聊天窗口 """
+        if event.button() == Qt.LeftButton:
+            self.old_pos = event.globalPos()
 
-# 托盘图标（右键菜单）
-class DeskPetTray(QSystemTrayIcon):
-    def __init__(self, app, pet_window, chat_window):
-        super().__init__()
+    def mouseMoveEvent(self, event):
+        """ 拖动窗口，并在锁定时同时移动桌宠 """
+        if self.old_pos:
+            delta = event.globalPos() - self.old_pos
+            self.move(self.x() + delta.x(), self.y() + delta.y())
 
-        self.app = app
-        self.pet_window = pet_window
-        self.chat_window = chat_window
-        self.setIcon(QIcon("icon.png"))  # 你可以替换成自己的桌宠图标
-        self.setToolTip("AI 桌宠")
+            # 如果锁定了，则同步移动桌宠窗口
+            if self.locked:
+                self.pet_window.move(self.pet_window.x() + delta.x(), self.pet_window.y() + delta.y())
 
-        # 创建菜单
-        menu = QMenu()
-        open_chat_action = QAction("打开对话框", self)
-        open_chat_action.triggered.connect(self.chat_window.show)
-        menu.addAction(open_chat_action)
+            self.old_pos = event.globalPos()
 
-        exit_action = QAction("退出", self)
-        exit_action.triggered.connect(self.app.quit)
-        menu.addAction(exit_action)
-
-        self.setContextMenu(menu)
+    def mouseReleaseEvent(self, event):
+        """ 释放鼠标 """
+        self.old_pos = None
 
 
 # 运行应用
@@ -154,12 +180,11 @@ if __name__ == "__main__":
     pet_window = DeskPet()
 
     # 创建对话窗口
-    chat_window = ChatWindow()
+    chat_window = ChatWindow(pet_window)
+    pet_window.set_chat_window(chat_window)  # 关联聊天窗口
 
-    # 创建系统托盘图标
-    tray_icon = DeskPetTray(app, pet_window, chat_window)
-    tray_icon.show()
-
+    # 显示窗口
     pet_window.show()
     chat_window.show()
+    
     sys.exit(app.exec_())
