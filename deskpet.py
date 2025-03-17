@@ -69,6 +69,9 @@ class DeskPet(QWidget):
         self.speaking_animation = os.path.join(BASE_DIR, "images", "Say", "Shining", "B_2")
         self.startup_animation = os.path.join(BASE_DIR, "images", "StartUP", "Nomal")
         self.raised_animation = os.path.join(BASE_DIR, "images", "Raise", "Raised_Dynamic", "Happy")
+        self.head_touch_start = os.path.join(BASE_DIR, "images", "Touch_Head", "A_Nomal")
+        self.head_touch_loop = os.path.join(BASE_DIR, "images", "Touch_Head", "B_Nomal")
+        self.head_touch_end = os.path.join(BASE_DIR, "images", "Touch_Head", "C_Nomal")
 
         self.setWindowTitle("AI 桌宠")
         self.setGeometry(100, 100, 400, 400)
@@ -83,11 +86,17 @@ class DeskPet(QWidget):
         self.old_pos = None
         self.chat_window = None
         self.locked = False
+        self.play_mode = False
+        self.head_touching = False
 
         self.animation_thread = AnimationThread(self.startup_animation, loop=False)
         self.animation_thread.update_pixmap.connect(self.update_frame)
         self.animation_thread.finished.connect(self.switch_to_default_animation)
         self.animation_thread.start()
+
+        self.play_mode_button = QPushButton("Play Mode", self)
+        self.play_mode_button.setGeometry(10, 10, 100, 30)
+        self.play_mode_button.clicked.connect(self.toggle_play_mode)
 
     def update_frame(self, pixmap):
         scaled_pixmap = pixmap.scaled(
@@ -109,6 +118,13 @@ class DeskPet(QWidget):
     def toggle_lock(self):
         self.locked = not self.locked
 
+    def toggle_play_mode(self):
+        self.play_mode = not self.play_mode
+        if self.play_mode:
+            self.play_mode_button.setText("Exit Play Mode")
+        else:
+            self.play_mode_button.setText("Play Mode")
+
     def change_animation(self, speaking):
         if self.being_dragged:
             self.animation_thread.set_image_folder(self.raised_animation)
@@ -122,12 +138,21 @@ class DeskPet(QWidget):
         self.show()
 
     def mousePressEvent(self, event):
+        if self.play_mode:
+            return
         if event.button() == Qt.LeftButton:
             self.old_pos = event.globalPos()
             self.being_dragged = True
             self.change_animation(False)
 
     def mouseMoveEvent(self, event):
+        if self.play_mode:
+            if event.y() < self.height() // 3:
+                if not self.head_touching:
+                    self.head_touching = True
+                    self.animation_thread.set_image_folder(self.head_touch_start, loop=False)
+                    QTimer.singleShot(len(self.animation_thread.image_paths) * 100, self.start_head_touch_loop)
+            return
         if self.old_pos:
             delta = event.globalPos() - self.old_pos
             self.move(self.x() + delta.x(), self.y() + delta.y())
@@ -135,7 +160,15 @@ class DeskPet(QWidget):
                 self.chat_window.move(self.chat_window.x() + delta.x(), self.chat_window.y() + delta.y())
             self.old_pos = event.globalPos()
 
+    def start_head_touch_loop(self):
+        self.animation_thread.set_image_folder(self.head_touch_loop)
+
     def mouseReleaseEvent(self, event):
+        if self.play_mode and self.head_touching:
+            self.head_touching = False
+            self.animation_thread.set_image_folder(self.head_touch_end, loop=False)
+            QTimer.singleShot(len(self.animation_thread.image_paths) * 100, self.switch_to_default_animation)
+            return
         self.old_pos = None
         self.being_dragged = False
         self.change_animation(False)
