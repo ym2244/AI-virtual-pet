@@ -1,0 +1,14 @@
+{
+  "name": "electron-ai-pet",
+  "version": "1.0.0",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "electron dist/main.js",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^6.0.0",
+    "electron": "^24.0.0",
+    "typescript": "^5.0.0"
+  }
+}
