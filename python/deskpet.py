@@ -232,7 +232,7 @@ class ChatWindow(QWidget):
         self.chat_display.append("桌宠: ")
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.add_next_character)
-        self.timer.start(50)
+        self.timer.start(100)  # important: how fast the program react to the mouse
 
     def add_next_character(self):
         if self.current_index < len(self.current_text):
