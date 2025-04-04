@@ -109,17 +109,32 @@ class DeskPet(QWidget):
         self.animation_thread.finished.connect(self.switch_to_default_animation)
         self.animation_thread.start()
 
-        self.play_mode_button = QPushButton("Play Mode", self)
-        self.play_mode_button.setGeometry(10, 10, 100, 30)
-        self.play_mode_button.clicked.connect(self.toggle_play_mode)
-
+        self.play_mode_button = QPushButton("Play", self)
+        self.play_mode_button.setFixedWidth(70)
         self.feed_button = QPushButton("Feed", self)
-        self.feed_button.setGeometry(120, 10, 100, 30)
-        self.feed_button.clicked.connect(self.feed_pet)
+        self.feed_button.setFixedWidth(70)
+        self.focus_button = QPushButton("Focus", self)
+        self.focus_button.setFixedWidth(70)
 
-        self.focus_button = QPushButton("Focus Mode", self)
-        self.focus_button.setGeometry(230, 10, 100, 30)
+        self.play_mode_button.clicked.connect(self.toggle_play_mode)
+        self.feed_button.clicked.connect(self.feed_pet)
         self.focus_button.clicked.connect(self.start_focus_mode)
+
+        button_layout = QVBoxLayout()
+        button_layout.setSpacing(5)
+        button_layout.addWidget(self.play_mode_button)
+        button_layout.addWidget(self.feed_button)
+        button_layout.addWidget(self.focus_button)
+
+        button_container = QWidget(self)
+        button_container.setLayout(button_layout)
+        button_container.move(10, 10)
+
+        self.focus_timer_label = QLabel(self)
+        self.focus_timer_label.setGeometry(130, 10, 200, 30)
+        self.focus_timer_label.setStyleSheet("color: red; font-weight: bold;")
+        self.focus_timer_label.hide()
+
 
         self.focus_timer_label = QLabel(self)
         self.focus_timer_label.setGeometry(340, 10, 200, 30)
@@ -224,7 +239,7 @@ class DeskPet(QWidget):
 
     def toggle_play_mode(self):
         self.play_mode = not self.play_mode
-        self.play_mode_button.setText("Exit Play Mode" if self.play_mode else "Play Mode")
+        self.play_mode_button.setText("Playing!" if self.play_mode else "Play Mode")
 
     def ensure_top(self):
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
