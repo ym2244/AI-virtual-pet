@@ -27,8 +27,39 @@ The animated pet images are from the open-source **VPet** project:
 
 ---
 
+## Setup
+### Create a virtual environment
+```bash
+python -m venv venv
+```
+
+### Activate the virtual environment
+#### Windows
+```bash
+venv\Scripts\activate
+```
+#### macOS/Linux
+```bash
+source venv/bin/activate
+```
+
+### Install required packages
+```bash
+pip install -r requirements.txt
+```
+
+### Set API Key
+Complete the `.env` file with your **Google Gemini API Key**.
+
+### Run the application
+```bash
+python deskpet.py
+```
+
+---
+
 ## Contact
-Contact: [lj662244@gmail.com]
+Contact: [lj662244@gmail.com]  
 GitHub: [https://github.com/ym2244/AI-virtual-pet](https://github.com/ym2244/AI-virtual-pet)
 
 ---

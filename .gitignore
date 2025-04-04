@@ -1,18 +1,16 @@
-# 忽略 Python 虚拟环境
+# Ignore Python virtual environment
 deskpet-env/
 
-# 忽略 API Key
+# Ignore API Key
 .env
 
-# 忽略 VS Code 配置文件
+# Ignore VS Code configuration files
 .vscode/
 
-# 忽略 Python 编译文件
+# Ignore Python compiled files
 __pycache__/
 *.pyc
 
 note.txt
 
 note.md
-
-electron/node_modules/
