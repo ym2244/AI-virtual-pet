@@ -86,7 +86,7 @@ class DeskPet(QWidget):
         self.feed_manager = FeedManager()
 
         self.setWindowTitle("AI 桌宠")
-        self.setGeometry(100, 100, 800, 600)  # 调整窗口大小为更大的矩形
+        self.setGeometry(100, 100, 800, 600)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
 
@@ -113,16 +113,6 @@ class DeskPet(QWidget):
         self.feed_button = QPushButton("喂食", self)
         self.feed_button.setGeometry(120, 10, 100, 30)
         self.feed_button.clicked.connect(self.feed_pet)
-
-        self.mood_label = QLabel(self)
-        self.mood_label.setGeometry(240, 10, 150, 30)
-        self.mood_label.setStyleSheet("color: black; font-weight: bold;")  # 确保字体颜色为黑色
-        self.mood_label.setAlignment(Qt.AlignCenter)
-        self.update_mood_label(80)  # 默认初始值
-
-    def update_mood_label(self, mood_score):
-        self.mood_label.setText(f"当前心情：{mood_score} / 100")
-
 
     def update_frame(self, pixmap):
         scaled_pixmap = pixmap.scaled(
@@ -168,7 +158,6 @@ class DeskPet(QWidget):
         self.animation_thread.finished.connect(self.switch_to_default_animation)
         self.animation_thread.start()
         self.chat_window.update_mood_bar()
-        self.update_mood_label(self.chat_window.ai.mood_score)
 
     def set_chat_window(self, chat_window):
         self.chat_window = chat_window
@@ -196,6 +185,8 @@ class DeskPet(QWidget):
         if self.play_mode:
             if event.y() < self.height() // 3 and not self.head_touching:
                 self.head_touching = True
+                self.chat_window.ai.mood_score = min(100, self.chat_window.ai.mood_score + 5)
+                self.chat_window.update_mood_bar()
                 self.animation_thread.set_image_folder(self.head_touch_start, loop=False)
                 QTimer.singleShot(len(self.animation_thread.image_paths)*100, self.start_head_touch_loop)
             return
@@ -228,7 +219,7 @@ class ChatWindow(QWidget):
         self.setWindowTitle("AI 桌宠对话框")
         self.setGeometry(500, 100, 400, 300)
         self.pet_window = pet_window
-        self.ai = DeskPetAI()  # 使用 AI 模块
+        self.ai = DeskPetAI()
         self.locked = False
         self.old_pos = None
 
@@ -276,7 +267,7 @@ class ChatWindow(QWidget):
         chat_layout.addWidget(self.pet_mode_button)
 
         # === 右边心情部分 ===
-        self.mood_label = QLabel(f"心情：{self.ai.mood_score}", self)
+        self.mood_label = QLabel(f"心情：\n{self.ai.mood_score}", self)
         self.mood_label.setAlignment(Qt.AlignCenter)
         self.mood_label.setStyleSheet("""
             color: black;
@@ -284,13 +275,16 @@ class ChatWindow(QWidget):
             font-weight: bold;
             padding: 2px;
         """)
+        self.mood_label.setFixedHeight(40)
+        self.mood_label.setMinimumWidth(50)
+        self.mood_label.setContentsMargins(0, 0, 0, 0)
 
         self.mood_bar = QProgressBar(self)
         self.mood_bar.setOrientation(Qt.Vertical)
         self.mood_bar.setMinimum(0)
         self.mood_bar.setMaximum(100)
         self.mood_bar.setValue(self.ai.mood_score)
-        self.mood_bar.setFormat("")  # 不显示进度条上的数值
+        self.mood_bar.setFormat("")
         self.mood_bar.setFixedWidth(12)
         self.mood_bar.setStyleSheet("""
             QProgressBar {
@@ -302,21 +296,29 @@ class ChatWindow(QWidget):
             }
         """)
 
+        # 用 HBox 包装 mood_bar 以实现居中显示
+        bar_container = QHBoxLayout()
+        bar_container.addStretch(1)
+        bar_container.addWidget(self.mood_bar)
+        bar_container.addStretch(1)
+        bar_widget = QWidget()
+        bar_widget.setLayout(bar_container)
+
         mood_layout = QVBoxLayout()
+        mood_layout.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+        mood_layout.setSpacing(4)
         mood_layout.addWidget(self.mood_label)
-        mood_layout.addWidget(self.mood_bar)
+        mood_layout.addWidget(bar_widget)
 
         right_widget = QWidget()
         right_widget.setLayout(mood_layout)
-        right_widget.setMaximumWidth(80)
+        right_widget.setMaximumWidth(100)
 
-        # 合并主布局
         main_layout.addLayout(chat_layout, stretch=4)
         main_layout.addWidget(right_widget, stretch=0)
-
         self.setLayout(main_layout)
 
-        # 可选全局样式
+        # 全局风格
         self.setStyleSheet("""
         QWidget {
             background-color: #f6f6f6;
@@ -341,7 +343,7 @@ class ChatWindow(QWidget):
 
     def update_mood_bar(self):
         self.mood_bar.setValue(self.ai.mood_score)
-        self.mood_label.setText(f"当前心情：{self.ai.mood_score} / 100")
+        self.mood_label.setText(f"心情：\n{self.ai.mood_score}")
 
     def send_message(self):
         user_text = self.input_box.text().strip()
@@ -369,7 +371,7 @@ class ChatWindow(QWidget):
         self.current_text = response_text
         self.current_index = 0
         self.chat_display.append("桌宠: ")
-        
+
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.add_next_character)
         self.timer.start(100)
