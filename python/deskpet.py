@@ -4,11 +4,10 @@ import glob
 import time
 import google.generativeai as genai
 from dotenv import load_dotenv
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTextEdit, QLineEdit, QPushButton, QLabel, QSystemTrayIcon, QMenu, QAction
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTextEdit, QLineEdit, QPushButton, QLabel, QSystemTrayIcon, QMenu, QAction, QProgressBar, QHBoxLayout, QInputDialog
 from PyQt5.QtGui import QPixmap, QIcon, QTextCursor
 from PyQt5.QtCore import QTimer, Qt, QThread, pyqtSignal
 from pet_ai import DeskPetAI  # Import AI logic
-from PyQt5.QtWidgets import QProgressBar, QHBoxLayout
 
 # Read API Key
 load_dotenv()
@@ -82,6 +81,8 @@ class DeskPet(QWidget):
         self.speaking_sad_animation = os.path.join(BASE_DIR, "images", "Say", "Self", "B_3")
         self.eat_happy_animation = os.path.join(BASE_DIR, "images", "Eat", "Happy", "back_lay")
         self.eat_sick_animation = os.path.join(BASE_DIR, "images", "Eat", "PoorCondition", "back_lay")
+        self.focus_animation = os.path.join(BASE_DIR, "images", "WORK", "Study", "B_1_Nomal")
+        self.focus_end_animation = os.path.join(BASE_DIR, "images", "WORK", "Study", "C_Nomal")
 
         self.feed_manager = FeedManager()
 
@@ -100,6 +101,8 @@ class DeskPet(QWidget):
         self.locked = False
         self.play_mode = False
         self.head_touching = False
+        self.in_focus_mode = False
+        self.remaining_seconds = 0
 
         self.animation_thread = AnimationThread(self.startup_animation, loop=False)
         self.animation_thread.update_pixmap.connect(self.update_frame)
@@ -114,15 +117,67 @@ class DeskPet(QWidget):
         self.feed_button.setGeometry(120, 10, 100, 30)
         self.feed_button.clicked.connect(self.feed_pet)
 
+        self.focus_button = QPushButton("Focus Mode", self)
+        self.focus_button.setGeometry(230, 10, 100, 30)
+        self.focus_button.clicked.connect(self.start_focus_mode)
+
+        self.focus_timer_label = QLabel(self)
+        self.focus_timer_label.setGeometry(340, 10, 200, 30)
+        self.focus_timer_label.setStyleSheet("color: red; font-weight: bold;")
+        self.focus_timer_label.hide()
+
+    def start_focus_mode(self):
+        minutes, ok = QInputDialog.getDouble(self, "Focus Mode", "Enter focus duration in minutes:", min=0.1, max=120, decimals=2)
+        if ok:
+            self.in_focus_mode = True
+            self.animation_thread.stop()
+            self.animation_thread = AnimationThread(self.focus_animation, loop=True)
+            self.animation_thread.update_pixmap.connect(self.update_frame)
+            self.animation_thread.start()
+
+            self.remaining_seconds = minutes * 60
+            self.focus_timer_label.show()
+            self.update_focus_timer_label()
+            self.focus_timer = QTimer(self)
+            self.focus_timer.timeout.connect(self.update_focus_countdown)
+            self.focus_timer.start(1000)
+
+    def update_focus_timer_label(self):
+        minutes = int(self.remaining_seconds) // 60
+        seconds = int(self.remaining_seconds) % 60
+        self.focus_timer_label.setText(f"Time: {minutes:02}:{seconds:02}")
+
+    def update_focus_countdown(self):
+        self.remaining_seconds -= 1
+        self.update_focus_timer_label()
+        if self.remaining_seconds <= 0:
+            self.focus_timer.stop()
+            self.focus_timer_label.hide()
+            self.end_focus_mode()
+
+    def end_focus_mode(self):
+        self.animation_thread.stop()
+        self.animation_thread = AnimationThread(self.focus_end_animation, loop=False)
+        self.animation_thread.update_pixmap.connect(self.update_frame)
+        self.animation_thread.finished.connect(self.focus_to_normal)
+        self.animation_thread.start()
+
+    def focus_to_normal(self):
+        self.in_focus_mode = False
+        self.switch_to_default_animation()
+
     def update_frame(self, pixmap):
         scaled_pixmap = pixmap.scaled(
             self.pet_label.width(), self.pet_label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.pet_label.setPixmap(scaled_pixmap)
 
     def switch_to_default_animation(self):
-        self.set_animation_by_mood(speaking=False)
+        if not self.in_focus_mode:
+            self.set_animation_by_mood(speaking=False)
 
     def set_animation_by_mood(self, speaking=False):
+        if self.in_focus_mode:
+            return
         self.animation_thread.stop()
         mood = self.chat_window.ai.mood_score if self.chat_window else 80
         if self.being_dragged:
@@ -146,6 +201,8 @@ class DeskPet(QWidget):
         self.animation_thread.start()
 
     def feed_pet(self):
+        if self.in_focus_mode:
+            return
         count, overfed = self.feed_manager.feed()
         folder = self.eat_sick_animation if overfed else self.eat_happy_animation
         if overfed:
@@ -179,10 +236,13 @@ class DeskPet(QWidget):
         if event.button() == Qt.LeftButton:
             self.old_pos = event.globalPos()
             self.being_dragged = True
-            self.set_animation_by_mood(speaking=False)
+            if not self.in_focus_mode:
+                self.set_animation_by_mood(speaking=False)
 
     def mouseMoveEvent(self, event):
         if self.play_mode:
+            if self.in_focus_mode:
+                return
             if event.y() < self.height() // 3 and not self.head_touching:
                 self.head_touching = True
                 self.chat_window.ai.mood_score = min(100, self.chat_window.ai.mood_score + 5)
@@ -198,17 +258,20 @@ class DeskPet(QWidget):
             self.old_pos = event.globalPos()
 
     def start_head_touch_loop(self):
-        self.animation_thread.set_image_folder(self.head_touch_loop)
+        if not self.in_focus_mode:
+            self.animation_thread.set_image_folder(self.head_touch_loop)
 
     def mouseReleaseEvent(self, event):
         if self.play_mode and self.head_touching:
             self.head_touching = False
-            self.animation_thread.set_image_folder(self.head_touch_end, loop=False)
-            QTimer.singleShot(len(self.animation_thread.image_paths)*100, self.switch_to_default_animation)
+            if not self.in_focus_mode:
+                self.animation_thread.set_image_folder(self.head_touch_end, loop=False)
+                QTimer.singleShot(len(self.animation_thread.image_paths)*100, self.switch_to_default_animation)
             return
         self.old_pos = None
         self.being_dragged = False
-        self.set_animation_by_mood(speaking=False)
+        if not self.in_focus_mode:
+            self.set_animation_by_mood(speaking=False)
 
 
 
