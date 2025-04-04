@@ -1,6 +1,7 @@
 import sys
 import os
 import glob
+import time
 import google.generativeai as genai
 from dotenv import load_dotenv
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTextEdit, QLineEdit, QPushButton, QLabel, QSystemTrayIcon, QMenu, QAction
@@ -9,20 +10,10 @@ from PyQt5.QtCore import QTimer, Qt, QThread, pyqtSignal
 from pet_ai import DeskPetAI  # 引入 AI 逻辑
 from PyQt5.QtWidgets import QProgressBar, QHBoxLayout
 
-
-
 # 读取 API Key
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-# 选择 Gemini AI 模型
 MODEL_NAME = "gemini-1.5-pro-latest"
-
-# AI 对话函数
-def chat_with_ai(user_message):
-    model = genai.GenerativeModel(MODEL_NAME)
-    response = model.generate_content(user_message)
-    return response.text
 
 class AnimationThread(QThread):
     update_pixmap = pyqtSignal(QPixmap)
@@ -36,18 +27,13 @@ class AnimationThread(QThread):
         self.loop = loop
 
     def run(self):
-        print(f"当前动画路径是：{self.image_folder}")
-        print(f"找到的图片数量：{len(self.image_paths)}")
-
         if not self.image_paths:
             print(f"⚠️ 警告：{self.image_folder} 目录为空，无法播放动画！")
             return
-        frames_played = 0
         while self.running:
             pixmap = QPixmap(self.image_paths[self.current_frame])
             self.update_pixmap.emit(pixmap)
             self.current_frame += 1
-            frames_played += 1
             if self.current_frame >= len(self.image_paths):
                 if self.loop:
                     self.current_frame = 0
@@ -66,11 +52,23 @@ class AnimationThread(QThread):
         self.current_frame = 0
         self.loop = loop
 
+class FeedManager:
+    def __init__(self):
+        self.feed_times = []
+
+    def feed(self):
+        now = time.time()
+        self.feed_times = [t for t in self.feed_times if now - t <= 30]
+        self.feed_times.append(now)
+        return len(self.feed_times), self.is_overfed()
+
+    def is_overfed(self):
+        return len(self.feed_times) > 3
+
 class DeskPet(QWidget):
     def __init__(self):
         super().__init__()
         BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
         self.default_animation = os.path.join(BASE_DIR, "images", "Default", "Happy", "1")
         self.speaking_animation = os.path.join(BASE_DIR, "images", "Say", "Shining", "B_2")
         self.startup_animation = os.path.join(BASE_DIR, "images", "StartUP", "Nomal")
@@ -82,9 +80,13 @@ class DeskPet(QWidget):
         self.sad_animation = os.path.join(BASE_DIR, "images", "Default", "PoorCondition", "2")
         self.speaking_normal_animation = os.path.join(BASE_DIR, "images", "Say", "Serious", "B")
         self.speaking_sad_animation = os.path.join(BASE_DIR, "images", "Say", "Self", "B_3")
+        self.eat_happy_animation = os.path.join(BASE_DIR, "images", "Eat", "Happy", "back_lay")
+        self.eat_sick_animation = os.path.join(BASE_DIR, "images", "Eat", "PoorCondition", "back_lay")
+
+        self.feed_manager = FeedManager()
 
         self.setWindowTitle("AI 桌宠")
-        self.setGeometry(100, 100, 400, 400)
+        self.setGeometry(100, 100, 800, 600)  # 调整窗口大小为更大的矩形
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
 
@@ -108,23 +110,30 @@ class DeskPet(QWidget):
         self.play_mode_button.setGeometry(10, 10, 100, 30)
         self.play_mode_button.clicked.connect(self.toggle_play_mode)
 
+        self.feed_button = QPushButton("喂食", self)
+        self.feed_button.setGeometry(120, 10, 100, 30)
+        self.feed_button.clicked.connect(self.feed_pet)
+
+        self.mood_label = QLabel(self)
+        self.mood_label.setGeometry(240, 10, 150, 30)
+        self.mood_label.setStyleSheet("color: black; font-weight: bold;")  # 确保字体颜色为黑色
+        self.mood_label.setAlignment(Qt.AlignCenter)
+        self.update_mood_label(80)  # 默认初始值
+
+    def update_mood_label(self, mood_score):
+        self.mood_label.setText(f"当前心情：{mood_score} / 100")
+
     def update_frame(self, pixmap):
         scaled_pixmap = pixmap.scaled(
-            self.pet_label.width(),
-            self.pet_label.height(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
-        )
+            self.pet_label.width(), self.pet_label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.pet_label.setPixmap(scaled_pixmap)
 
     def switch_to_default_animation(self):
         self.set_animation_by_mood(speaking=False)
 
-    # 🌟 统一动画切换函数（新增加的统一动画函数）
     def set_animation_by_mood(self, speaking=False):
         self.animation_thread.stop()
         mood = self.chat_window.ai.mood_score if self.chat_window else 80
-
         if self.being_dragged:
             folder = self.raised_animation
         elif speaking:
@@ -141,10 +150,24 @@ class DeskPet(QWidget):
                 folder = self.normal_animation
             else:
                 folder = self.sad_animation
-
         self.animation_thread = AnimationThread(folder, loop=True)
         self.animation_thread.update_pixmap.connect(self.update_frame)
         self.animation_thread.start()
+
+    def feed_pet(self):
+        count, overfed = self.feed_manager.feed()
+        folder = self.eat_sick_animation if overfed else self.eat_happy_animation
+        if overfed:
+            self.chat_window.ai.mood_score = max(0, self.chat_window.ai.mood_score - 5)
+        else:
+            self.chat_window.ai.mood_score = min(100, self.chat_window.ai.mood_score + 5)
+        self.animation_thread.stop()
+        self.animation_thread = AnimationThread(folder, loop=False)
+        self.animation_thread.update_pixmap.connect(self.update_frame)
+        self.animation_thread.finished.connect(self.switch_to_default_animation)
+        self.animation_thread.start()
+        self.chat_window.update_mood_bar()
+        self.update_mood_label(self.chat_window.ai.mood_score)
 
     def set_chat_window(self, chat_window):
         self.chat_window = chat_window
@@ -166,7 +189,7 @@ class DeskPet(QWidget):
         if event.button() == Qt.LeftButton:
             self.old_pos = event.globalPos()
             self.being_dragged = True
-            self.set_animation_by_mood(speaking=False)  #🌟修改调用到统一函数
+            self.set_animation_by_mood(speaking=False)
 
     def mouseMoveEvent(self, event):
         if self.play_mode:
@@ -193,9 +216,7 @@ class DeskPet(QWidget):
             return
         self.old_pos = None
         self.being_dragged = False
-        self.set_animation_by_mood(speaking=False)  #🌟修改调用到统一函数
-
-# 🗑️ 删除了原DeskPet类和类外的 change_animation 及 change_animation_based_on_mood 方法
+        self.set_animation_by_mood(speaking=False)
 
 
 
@@ -219,11 +240,17 @@ class ChatWindow(QWidget):
         self.mood_bar.setMinimum(0)
         self.mood_bar.setMaximum(100)
         self.mood_bar.setValue(self.ai.mood_score)
-        self.mood_bar.setFormat("心情\n%d%%")
+        self.mood_bar.setFormat("当前心情：%v / %m")
+
+        # 🌟 添加心情标签
+        self.mood_label = QLabel(f"当前心情：{self.ai.mood_score} / 100", self)
+        self.mood_label.setAlignment(Qt.AlignCenter)
+        self.mood_label.setStyleSheet("color: white; font-weight: bold;")
 
         # 布局设置
         main_layout.addLayout(layout, stretch=4)
         main_layout.addWidget(self.mood_bar, stretch=1)
+        main_layout.addWidget(self.mood_label, stretch=0)  # 添加心情标签到布局
         self.setLayout(main_layout)
 
 
@@ -232,6 +259,7 @@ class ChatWindow(QWidget):
         layout.addWidget(self.chat_display)
 
         self.input_box = QLineEdit(self)
+        self.input_box.setPlaceholderText("输入文字与宠物对话")  # 添加灰色提示文字
         layout.addWidget(self.input_box)
 
         send_button = QPushButton("发送", self)
@@ -262,8 +290,9 @@ class ChatWindow(QWidget):
 
 
     def update_mood_bar(self):
-        """实时更新心情进度条的数值"""
+        """实时更新心情进度条和标签的数值"""
         self.mood_bar.setValue(self.ai.mood_score)
+        self.mood_label.setText(f"当前心情：{self.ai.mood_score} / 100")
 
 
     def send_message(self):

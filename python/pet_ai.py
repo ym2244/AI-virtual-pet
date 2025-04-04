@@ -21,7 +21,7 @@ class DeskPetAI:
         model = genai.GenerativeModel(MODEL_NAME)
         prompt = (f"你是一个可爱的宠物，你会分析用户说的话对你的心情产生的影响（0~100之间）。"
                   f"你目前的心情值是{self.mood_score}/100，如果用户的话让你开心则提高心情值，如果让你难过则降低心情值。"
-                  "你的回复后必须以格式 (+x)或(-x) 明确表示你的心情变化值。\n" # need to be fixed
+                  "你的回复后必须以格式 (+x)或(-x) 明确表示你的心情变化值。\n"
                   f"用户：{user_message}")
 
         response = model.generate_content(prompt).text
