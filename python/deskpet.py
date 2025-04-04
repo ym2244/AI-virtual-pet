@@ -123,6 +123,7 @@ class DeskPet(QWidget):
     def update_mood_label(self, mood_score):
         self.mood_label.setText(f"当前心情：{mood_score} / 100")
 
+
     def update_frame(self, pixmap):
         scaled_pixmap = pixmap.scaled(
             self.pet_label.width(), self.pet_label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -231,50 +232,102 @@ class ChatWindow(QWidget):
         self.locked = False
         self.old_pos = None
 
+        # 主布局拆分为 左边聊天 + 右边心情
         main_layout = QHBoxLayout()
-        layout = QVBoxLayout()
+        chat_layout = QVBoxLayout()
 
-        # 心情进度条
+        # === 聊天部分 ===
+        self.chat_display = QTextEdit(self)
+        self.chat_display.setReadOnly(True)
+        chat_layout.addWidget(self.chat_display)
+
+        self.input_box = QLineEdit(self)
+        self.input_box.setPlaceholderText("输入文字与宠物对话")
+        chat_layout.addWidget(self.input_box)
+
+        # 样式统一的按钮
+        button_style = """
+        QPushButton {
+            background-color: #4CAF50;
+            color: white;
+            padding: 6px;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background-color: #45a049;
+        }
+        """
+
+        send_button = QPushButton("发送", self)
+        send_button.setStyleSheet(button_style)
+        send_button.clicked.connect(self.send_message)
+        chat_layout.addWidget(send_button)
+
+        self.lock_button = QPushButton("🔒 锁定", self)
+        self.lock_button.setStyleSheet(button_style)
+        self.lock_button.clicked.connect(self.toggle_lock)
+        chat_layout.addWidget(self.lock_button)
+
+        self.pet_mode_button = QPushButton("切换宠物模式", self)
+        self.pet_mode_button.setStyleSheet(button_style)
+        self.pet_mode_button.clicked.connect(self.toggle_pet_mode)
+        chat_layout.addWidget(self.pet_mode_button)
+
+        # === 右边心情部分 ===
+        self.mood_label = QLabel(f"心情：{self.ai.mood_score}", self)
+        self.mood_label.setAlignment(Qt.AlignCenter)
+        self.mood_label.setStyleSheet("""
+            color: black;
+            font-size: 12px;
+            font-weight: bold;
+            padding: 2px;
+        """)
+
         self.mood_bar = QProgressBar(self)
         self.mood_bar.setOrientation(Qt.Vertical)
         self.mood_bar.setMinimum(0)
         self.mood_bar.setMaximum(100)
         self.mood_bar.setValue(self.ai.mood_score)
-        self.mood_bar.setFormat("当前心情：%v / %m")
+        self.mood_bar.setFormat("")  # 不显示进度条上的数值
+        self.mood_bar.setFixedWidth(12)
+        self.mood_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #aaa;
+                background: #eee;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+            }
+        """)
 
-        # 🌟 添加心情标签
-        self.mood_label = QLabel(f"当前心情：{self.ai.mood_score} / 100", self)
-        self.mood_label.setAlignment(Qt.AlignCenter)
-        self.mood_label.setStyleSheet("color: white; font-weight: bold;")
+        mood_layout = QVBoxLayout()
+        mood_layout.addWidget(self.mood_label)
+        mood_layout.addWidget(self.mood_bar)
 
-        # 布局设置
-        main_layout.addLayout(layout, stretch=4)
-        main_layout.addWidget(self.mood_bar, stretch=1)
-        main_layout.addWidget(self.mood_label, stretch=0)  # 添加心情标签到布局
+        right_widget = QWidget()
+        right_widget.setLayout(mood_layout)
+        right_widget.setMaximumWidth(80)
+
+        # 合并主布局
+        main_layout.addLayout(chat_layout, stretch=4)
+        main_layout.addWidget(right_widget, stretch=0)
+
         self.setLayout(main_layout)
 
-
-        self.chat_display = QTextEdit(self)
-        self.chat_display.setReadOnly(True)
-        layout.addWidget(self.chat_display)
-
-        self.input_box = QLineEdit(self)
-        self.input_box.setPlaceholderText("输入文字与宠物对话")  # 添加灰色提示文字
-        layout.addWidget(self.input_box)
-
-        send_button = QPushButton("发送", self)
-        send_button.clicked.connect(self.send_message)
-        layout.addWidget(send_button)
-
-        self.lock_button = QPushButton("🔒 锁定", self)
-        self.lock_button.clicked.connect(self.toggle_lock)
-        layout.addWidget(self.lock_button)
-
-        # 添加 "切换宠物模式" 按钮
-        self.pet_mode_button = QPushButton("切换宠物模式", self)
-        self.pet_mode_button.clicked.connect(self.toggle_pet_mode)
-        layout.addWidget(self.pet_mode_button)
-
+        # 可选全局样式
+        self.setStyleSheet("""
+        QWidget {
+            background-color: #f6f6f6;
+            font-family: "Segoe UI", sans-serif;
+        }
+        QLineEdit, QTextEdit {
+            background-color: #ffffff;
+            border: 1px solid #ccc;
+            padding: 4px;
+        }
+        """)
 
     def toggle_lock(self):
         self.locked = not self.locked
@@ -282,18 +335,13 @@ class ChatWindow(QWidget):
         self.lock_button.setText("🔓 解锁" if self.locked else "🔒 锁定")
 
     def toggle_pet_mode(self):
-        """ 切换 AI 进入 'Pet Mode'（宠物模式） """
         self.ai.toggle_pet_mode()
         mode_text = "宠物模式 ON" if self.ai.pet_mode else "宠物模式 OFF"
         self.chat_display.append(f"🌟 {mode_text}")
 
-
-
     def update_mood_bar(self):
-        """实时更新心情进度条和标签的数值"""
         self.mood_bar.setValue(self.ai.mood_score)
         self.mood_label.setText(f"当前心情：{self.ai.mood_score} / 100")
-
 
     def send_message(self):
         user_text = self.input_box.text().strip()
@@ -301,8 +349,6 @@ class ChatWindow(QWidget):
             return
 
         self.chat_display.append(f"我: {user_text}")
-
-        #🌟更新调用到统一动画函数
         self.pet_window.set_animation_by_mood(speaking=True)
 
         ai_response = (self.ai.chat_with_ai(user_text) if self.ai.pet_mode else
@@ -310,7 +356,6 @@ class ChatWindow(QWidget):
 
         self.show_response_step_by_step(ai_response)
         self.input_box.clear()
-
 
     def changeEvent(self, event):
         if event.type() == event.WindowStateChange:
@@ -327,7 +372,7 @@ class ChatWindow(QWidget):
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.add_next_character)
-        self.timer.start(100)  # important: how fast the program react to the mouse
+        self.timer.start(100)
 
     def add_next_character(self):
         if self.current_index < len(self.current_text):
@@ -336,8 +381,8 @@ class ChatWindow(QWidget):
             self.current_index += 1
         else:
             self.timer.stop()
-            # 🌟更新调用到统一动画函数
             self.pet_window.set_animation_by_mood(speaking=False)
+
 
 
 if __name__ == "__main__":
