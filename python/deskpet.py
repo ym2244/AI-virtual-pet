@@ -160,7 +160,7 @@ class DeskPet(QWidget):
     def update_focus_timer_label(self):
         minutes = int(self.remaining_seconds) // 60
         seconds = int(self.remaining_seconds) % 60
-        self.focus_timer_label.setText(f"Time: {minutes:02}:{seconds:02}")
+        self.focus_timer_label.setText(f"Timer: {minutes:02}:{seconds:02}")
 
     def update_focus_countdown(self):
         self.remaining_seconds -= 1
@@ -239,7 +239,7 @@ class DeskPet(QWidget):
 
     def toggle_play_mode(self):
         self.play_mode = not self.play_mode
-        self.play_mode_button.setText("Playing!" if self.play_mode else "Play Mode")
+        self.play_mode_button.setText("Yeah!" if self.play_mode else "Play")
 
     def ensure_top(self):
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
@@ -431,8 +431,11 @@ class ChatWindow(QWidget):
         self.chat_display.append(f"Me: {user_text}")
         self.pet_window.set_animation_by_mood(speaking=True)
 
-        ai_response = (self.ai.chat_with_ai(user_text) if self.ai.pet_mode else
-                       genai.GenerativeModel("gemini-1.5-pro-latest").generate_content(user_text).text)
+        if self.ai.pet_mode:
+            ai_response = self.ai.chat_with_ai(user_text)
+            self.update_mood_bar() 
+        else:
+            ai_response = genai.GenerativeModel("gemini-1.5-pro-latest").generate_content(user_text).text
 
         self.show_response_step_by_step(ai_response)
         self.input_box.clear()
