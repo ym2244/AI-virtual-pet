@@ -7,10 +7,10 @@ from dotenv import load_dotenv
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTextEdit, QLineEdit, QPushButton, QLabel, QSystemTrayIcon, QMenu, QAction
 from PyQt5.QtGui import QPixmap, QIcon, QTextCursor
 from PyQt5.QtCore import QTimer, Qt, QThread, pyqtSignal
-from pet_ai import DeskPetAI  # 引入 AI 逻辑
+from pet_ai import DeskPetAI  # Import AI logic
 from PyQt5.QtWidgets import QProgressBar, QHBoxLayout
 
-# 读取 API Key
+# Read API Key
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 MODEL_NAME = "gemini-1.5-pro-latest"
@@ -28,7 +28,7 @@ class AnimationThread(QThread):
 
     def run(self):
         if not self.image_paths:
-            print(f"⚠️ 警告：{self.image_folder} 目录为空，无法播放动画！")
+            print(f"⚠️ Warning: {self.image_folder} directory is empty, unable to play animation!")
             return
         while self.running:
             pixmap = QPixmap(self.image_paths[self.current_frame])
@@ -85,7 +85,7 @@ class DeskPet(QWidget):
 
         self.feed_manager = FeedManager()
 
-        self.setWindowTitle("AI 桌宠")
+        self.setWindowTitle("AI Desktop Pet")
         self.setGeometry(100, 100, 800, 600)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -110,7 +110,7 @@ class DeskPet(QWidget):
         self.play_mode_button.setGeometry(10, 10, 100, 30)
         self.play_mode_button.clicked.connect(self.toggle_play_mode)
 
-        self.feed_button = QPushButton("喂食", self)
+        self.feed_button = QPushButton("Feed", self)
         self.feed_button.setGeometry(120, 10, 100, 30)
         self.feed_button.clicked.connect(self.feed_pet)
 
@@ -216,27 +216,27 @@ class ChatWindow(QWidget):
     def __init__(self, pet_window):
         super().__init__()
 
-        self.setWindowTitle("AI 桌宠对话框")
+        self.setWindowTitle("AI Desktop Pet Chat Window")
         self.setGeometry(500, 100, 400, 300)
         self.pet_window = pet_window
         self.ai = DeskPetAI()
         self.locked = False
         self.old_pos = None
 
-        # 主布局拆分为 左边聊天 + 右边心情
+        # Main layout split into left chat + right mood
         main_layout = QHBoxLayout()
         chat_layout = QVBoxLayout()
 
-        # === 聊天部分 ===
+        # === Chat Section ===
         self.chat_display = QTextEdit(self)
         self.chat_display.setReadOnly(True)
         chat_layout.addWidget(self.chat_display)
 
         self.input_box = QLineEdit(self)
-        self.input_box.setPlaceholderText("输入文字与宠物对话")
+        self.input_box.setPlaceholderText("Enter text to chat with the pet")
         chat_layout.addWidget(self.input_box)
 
-        # 样式统一的按钮
+        # Uniform style buttons
         button_style = """
         QPushButton {
             background-color: #4CAF50;
@@ -251,23 +251,23 @@ class ChatWindow(QWidget):
         }
         """
 
-        send_button = QPushButton("发送", self)
+        send_button = QPushButton("Send", self)
         send_button.setStyleSheet(button_style)
         send_button.clicked.connect(self.send_message)
         chat_layout.addWidget(send_button)
 
-        self.lock_button = QPushButton("🔒 锁定", self)
+        self.lock_button = QPushButton("🔒 Lock", self)
         self.lock_button.setStyleSheet(button_style)
         self.lock_button.clicked.connect(self.toggle_lock)
         chat_layout.addWidget(self.lock_button)
 
-        self.pet_mode_button = QPushButton("切换宠物模式", self)
+        self.pet_mode_button = QPushButton("Switch Pet Mode", self)
         self.pet_mode_button.setStyleSheet(button_style)
         self.pet_mode_button.clicked.connect(self.toggle_pet_mode)
         chat_layout.addWidget(self.pet_mode_button)
 
-        # === 右边心情部分 ===
-        self.mood_label = QLabel(f"心情：\n{self.ai.mood_score}", self)
+        # === Right Mood Section ===
+        self.mood_label = QLabel(f"Mood:\n{self.ai.mood_score}", self)
         self.mood_label.setAlignment(Qt.AlignCenter)
         self.mood_label.setStyleSheet("""
             color: black;
@@ -296,7 +296,7 @@ class ChatWindow(QWidget):
             }
         """)
 
-        # 用 HBox 包装 mood_bar 以实现居中显示
+        # Use HBox to wrap mood_bar for centered display
         bar_container = QHBoxLayout()
         bar_container.addStretch(1)
         bar_container.addWidget(self.mood_bar)
@@ -318,7 +318,7 @@ class ChatWindow(QWidget):
         main_layout.addWidget(right_widget, stretch=0)
         self.setLayout(main_layout)
 
-        # 全局风格
+        # Global style
         self.setStyleSheet("""
         QWidget {
             background-color: #f6f6f6;
@@ -334,23 +334,23 @@ class ChatWindow(QWidget):
     def toggle_lock(self):
         self.locked = not self.locked
         self.pet_window.toggle_lock()
-        self.lock_button.setText("🔓 解锁" if self.locked else "🔒 锁定")
+        self.lock_button.setText("🔓 Unlock" if self.locked else "🔒 Lock")
 
     def toggle_pet_mode(self):
         self.ai.toggle_pet_mode()
-        mode_text = "宠物模式 ON" if self.ai.pet_mode else "宠物模式 OFF"
+        mode_text = "Pet Mode ON" if self.ai.pet_mode else "Pet Mode OFF"
         self.chat_display.append(f"🌟 {mode_text}")
 
     def update_mood_bar(self):
         self.mood_bar.setValue(self.ai.mood_score)
-        self.mood_label.setText(f"心情：\n{self.ai.mood_score}")
+        self.mood_label.setText(f"Mood:\n{self.ai.mood_score}")
 
     def send_message(self):
         user_text = self.input_box.text().strip()
         if not user_text:
             return
 
-        self.chat_display.append(f"我: {user_text}")
+        self.chat_display.append(f"Me: {user_text}")
         self.pet_window.set_animation_by_mood(speaking=True)
 
         ai_response = (self.ai.chat_with_ai(user_text) if self.ai.pet_mode else
@@ -370,7 +370,7 @@ class ChatWindow(QWidget):
     def show_response_step_by_step(self, response_text):
         self.current_text = response_text
         self.current_index = 0
-        self.chat_display.append("桌宠: ")
+        self.chat_display.append("Pet: ")
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.add_next_character)

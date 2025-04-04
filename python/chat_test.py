@@ -2,25 +2,25 @@ import google.generativeai as genai
 import os
 from dotenv import load_dotenv
 
-# 读取 API Key
+# Load API Key
 load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
 
-# 选择一个支持的 Gemini 模型
+# Select a supported Gemini model
 MODEL_NAME = "gemini-1.5-pro-latest"
 
-# AI 聊天函数
+# AI chat function
 def chat_with_ai(user_message):
-    model = genai.GenerativeModel(MODEL_NAME)  # 使用新模型名称
+    model = genai.GenerativeModel(MODEL_NAME)  # Use the new model name
     response = model.generate_content(user_message)
     return response.text
 
-# 测试交互
+# Test interaction
 if __name__ == "__main__":
     while True:
-        user_input = input("你: ")
+        user_input = input("You: ")
         if user_input.lower() in ["exit", "quit"]:
             break
         response = chat_with_ai(user_input)
-        print("AI 桌宠:", response)
+        print("AI Desk Pet:", response)

@@ -1,4 +1,4 @@
-# pet_ai.py (单独的AI处理和情绪调整模块）
+# pet_ai.py (Standalone AI processing and mood adjustment module)
 import google.generativeai as genai
 from dotenv import load_dotenv
 import os
@@ -19,23 +19,23 @@ class DeskPetAI:
 
     def chat_with_ai(self, user_message):
         model = genai.GenerativeModel(MODEL_NAME)
-        prompt = (f"你是一个可爱的宠物，你会分析用户说的话对你的心情产生的影响（0~100之间）。"
-                  f"你目前的心情值是{self.mood_score}/100，如果用户的话让你开心则提高心情值，如果让你难过则降低心情值。"
-                  "你的回复后必须以格式 (+x)或(-x) 明确表示你的心情变化值。\n"
-                  f"用户：{user_message}")
+        prompt = (f"You are a cute pet, and you will analyze the user's words to determine their impact on your mood (between 0 and 100). "
+                  f"Your current mood score is {self.mood_score}/100. If the user's words make you happy, increase your mood score; if they make you sad, decrease it. "
+                  "Your reply must clearly indicate the mood change value in the format (+x) or (-x) at the end.\n"
+                  f"User: {user_message}")
 
         response = model.generate_content(prompt).text
-        self.adjust_mood(response)  # 更新心情值
-        return response.split('(')[0]  # 返回纯文本回复给界面
+        self.adjust_mood(response)  # Update mood score
+        return response.split('(')[0]  # Return plain text reply to the interface
 
     def adjust_mood(self, ai_response):
         mood_change_match = re.search(r"\(([+-]\d+)\)", ai_response)
         if mood_change_match:
             mood_change = int(mood_change_match.group(1))
             self.mood_score = max(0, min(100, self.mood_score + mood_change))
-            print(f"心情值变化了: {mood_change}, 当前心情值为: {self.mood_score}")
+            print(f"Mood score changed by: {mood_change}, current mood score is: {self.mood_score}")
         else:
-            print("⚠️ AI未返回明确心情变化值，心情不变。")
+            print("⚠️ AI did not return a clear mood change value, mood remains unchanged.")
 
     def simple_chat(self, user_message):
         model = genai.GenerativeModel(MODEL_NAME)
